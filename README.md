@@ -41,7 +41,7 @@
 在终端中执行以下命令即可完成安装：
 
 ```
-git clone --branch master --depth 1 https://ghfast.top/https://github.com/wnlen/clash-for-linux.git
+git clone --branch master --depth 1 https://ghfast.top/https://github.com/aoru45/clash-for-linux.git
 cd clash-for-linux
 bash install.sh
 ```
@@ -202,7 +202,7 @@ clashctl boot proxy on|off|status
 
 ```bash
 cd /root
-git clone --branch master --depth 1 https://ghfast.top/https://github.com/wnlen/clash-for-linux.git
+git clone --branch master --depth 1 https://ghfast.top/https://github.com/aoru45/clash-for-linux.git
 cd clash-for-linux
 ```
 
@@ -521,7 +521,7 @@ chmod +x /etc/rc.local
 3. 程序日志中出现`error: unsupported rule type RULE-SET`报错，解决方法查看官方[WIKI](https://github.com/Dreamacro/clash/wiki/FAQ#error-unsupported-rule-type-rule-set)
 ## ⭐ Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=wnlen/clash-for-linux&type=Date)](https://star-history.com/#wnlen/clash-for-linux&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=aoru45/clash-for-linux&type=Date)](https://star-history.com/#aoru45/clash-for-linux&Date)
 
 ## ⚠️ 特别声明
 
