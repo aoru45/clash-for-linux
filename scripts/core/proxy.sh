@@ -7,16 +7,98 @@ proxy_host() {
   echo "${CLASH_PROXY_HOST:-127.0.0.1}"
 }
 
-proxy_port() {
+proxy_http_port_from_config() {
   local config_file="${1:-$RUNTIME_DIR/config.yaml}"
   local port
 
   [ -s "$config_file" ] || die "配置文件不存在：$config_file"
 
-  port="$("$(yq_bin)" eval '.["mixed-port"] // .port // ""' "$config_file" 2>/dev/null | head -n 1)"
+  port="$("$(yq_bin)" eval '.["mixed-port"] // ""' "$config_file" 2>/dev/null | head -n 1)"
+  if runtime_port_value_is_valid "$port" && [ "$port" != "0" ]; then
+    echo "$port"
+    return 0
+  fi
+
+  port="$("$(yq_bin)" eval '.port // ""' "$config_file" 2>/dev/null | head -n 1)"
   [ -n "${port:-}" ] && [ "$port" != "null" ] || die "未在配置文件中找到代理端口"
+  runtime_port_value_is_valid "$port" || die "配置文件代理端口不合法：$port"
 
   echo "$port"
+}
+
+proxy_socks_port_from_config() {
+  local config_file="${1:-$RUNTIME_DIR/config.yaml}"
+  local port
+
+  [ -s "$config_file" ] || die "配置文件不存在：$config_file"
+
+  port="$("$(yq_bin)" eval '.["mixed-port"] // ""' "$config_file" 2>/dev/null | head -n 1)"
+  if runtime_port_value_is_valid "$port" && [ "$port" != "0" ]; then
+    echo "$port"
+    return 0
+  fi
+
+  port="$("$(yq_bin)" eval '.["socks-port"] // ""' "$config_file" 2>/dev/null | head -n 1)"
+  [ -n "${port:-}" ] && [ "$port" != "null" ] || die "未在配置文件中找到 SOCKS 代理端口"
+  runtime_port_value_is_valid "$port" || die "配置文件 SOCKS 代理端口不合法：$port"
+
+  echo "$port"
+}
+
+proxy_http_port_from_controller() {
+  local json port
+
+  json="$(controller_curl GET "/configs" 2>/dev/null)" || return 1
+
+  port="$(printf '%s\n' "$json" | "$(yq_bin)" -p=json eval '.["mixed-port"] // ""' - 2>/dev/null | head -n 1)"
+  if runtime_port_value_is_valid "$port" && [ "$port" != "0" ]; then
+    echo "$port"
+    return 0
+  fi
+
+  port="$(printf '%s\n' "$json" | "$(yq_bin)" -p=json eval '.port // ""' - 2>/dev/null | head -n 1)"
+  runtime_port_value_is_valid "$port" || return 1
+  [ "$port" != "0" ] || return 1
+
+  echo "$port"
+}
+
+proxy_socks_port_from_controller() {
+  local json port
+
+  json="$(controller_curl GET "/configs" 2>/dev/null)" || return 1
+
+  port="$(printf '%s\n' "$json" | "$(yq_bin)" -p=json eval '.["mixed-port"] // ""' - 2>/dev/null | head -n 1)"
+  if runtime_port_value_is_valid "$port" && [ "$port" != "0" ]; then
+    echo "$port"
+    return 0
+  fi
+
+  port="$(printf '%s\n' "$json" | "$(yq_bin)" -p=json eval '.["socks-port"] // ""' - 2>/dev/null | head -n 1)"
+  runtime_port_value_is_valid "$port" || return 1
+  [ "$port" != "0" ] || return 1
+
+  echo "$port"
+}
+
+proxy_port() {
+  local config_file="${1:-$RUNTIME_DIR/config.yaml}"
+
+  if [ "$config_file" = "$RUNTIME_DIR/config.yaml" ] && proxy_http_port_from_controller 2>/dev/null; then
+    return 0
+  fi
+
+  proxy_http_port_from_config "$config_file"
+}
+
+proxy_socks_port() {
+  local config_file="${1:-$RUNTIME_DIR/config.yaml}"
+
+  if [ "$config_file" = "$RUNTIME_DIR/config.yaml" ] && proxy_socks_port_from_controller 2>/dev/null; then
+    return 0
+  fi
+
+  proxy_socks_port_from_config "$config_file"
 }
 
 proxy_http_url() {
@@ -24,7 +106,7 @@ proxy_http_url() {
 }
 
 proxy_socks_url() {
-  echo "socks5://$(proxy_host):$(proxy_port)"
+  echo "socks5://$(proxy_host):$(proxy_socks_port)"
 }
 
 proxy_no_proxy_value() {
@@ -231,26 +313,90 @@ controller_api_base() {
   echo "http://$addr"
 }
 
+controller_api_base_candidates() {
+  local active_addr
+
+  active_addr="$(read_runtime_value "RUNTIME_ACTIVE_CONTROLLER" 2>/dev/null || true)"
+  {
+    [ -n "${active_addr:-}" ] && echo "http://${active_addr}"
+    controller_api_base 2>/dev/null || true
+    echo "http://127.0.0.1:9090"
+  } | awk 'NF && !seen[$0]++'
+}
+
+controller_active_api_base() {
+  local base secret
+
+  secret="$(controller_secret 2>/dev/null || true)"
+
+  while IFS= read -r base; do
+    [ -n "${base:-}" ] || continue
+    if [ -n "${secret:-}" ]; then
+      curl --noproxy '*' -fsSL --connect-timeout 1 --max-time 2 \
+        -H "Authorization: Bearer $secret" \
+        "$base/version" >/dev/null 2>&1
+    else
+      curl --noproxy '*' -fsSL --connect-timeout 1 --max-time 2 \
+        "$base/version" >/dev/null 2>&1
+    fi
+    if [ "$?" -eq 0 ]; then
+      write_runtime_value "RUNTIME_ACTIVE_CONTROLLER" "${base#http://}" 2>/dev/null || true
+      echo "$base"
+      return 0
+    fi
+  done <<EOF
+$(controller_api_base_candidates)
+EOF
+
+  return 1
+}
+
+controller_active_addr() {
+  local base
+
+  base="$(controller_active_api_base)" || return 1
+  echo "${base#http://}"
+}
+
 controller_curl() {
   local method="$1"
   local path="$2"
   local data="${3:-}"
   local base secret
 
-  base="$(controller_api_base)"
   secret="$(controller_secret)"
 
-  if [ -n "${data:-}" ]; then
-    curl -fsSL -X "$method" \
-      -H "Content-Type: application/json" \
-      ${secret:+-H "Authorization: Bearer $secret"} \
-      --data "$data" \
-      "$base$path"
-  else
-    curl -fsSL -X "$method" \
-      ${secret:+-H "Authorization: Bearer $secret"} \
-      "$base$path"
-  fi
+  while IFS= read -r base; do
+    [ -n "${base:-}" ] || continue
+
+    if [ -n "${data:-}" ]; then
+      if [ -n "${secret:-}" ]; then
+        curl --noproxy '*' -fsSL --connect-timeout 1 --max-time 2 -X "$method" \
+          -H "Content-Type: application/json" \
+          -H "Authorization: Bearer $secret" \
+          --data "$data" \
+          "$base$path" && return 0
+      else
+        curl --noproxy '*' -fsSL --connect-timeout 1 --max-time 2 -X "$method" \
+          -H "Content-Type: application/json" \
+          --data "$data" \
+          "$base$path" && return 0
+      fi
+    else
+      if [ -n "${secret:-}" ]; then
+        curl --noproxy '*' -fsSL --connect-timeout 1 --max-time 2 -X "$method" \
+          -H "Authorization: Bearer $secret" \
+          "$base$path" && return 0
+      else
+        curl --noproxy '*' -fsSL --connect-timeout 1 --max-time 2 -X "$method" \
+          "$base$path" && return 0
+      fi
+    fi
+  done <<EOF
+$(controller_api_base_candidates)
+EOF
+
+  return 1
 }
 
 proxy_controller_reachable() {

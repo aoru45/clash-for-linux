@@ -38,7 +38,13 @@ _clashctl_real_on_target() {
 
 _clash_alias_project_dir() {
   local self_dir
-  self_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
+  if [ -n "${CLASH_FOR_LINUX_PROJECT_DIR:-}" ]; then
+    echo "$CLASH_FOR_LINUX_PROJECT_DIR"
+    return 0
+  fi
+
+  self_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." && pwd)"
   echo "$self_dir"
 }
 
@@ -124,24 +130,177 @@ _clash_alias_runtime_proxy_port() {
   config_file="$(_clash_alias_runtime_config_file)"
   [ -s "$config_file" ] || return 1
 
+  port="$(_clash_alias_controller_http_proxy_port 2>/dev/null || true)"
+  if _clash_alias_valid_port "$port"; then
+    echo "$port"
+    return 0
+  fi
+
   yq_bin="$(_clash_alias_yq_bin)"
   if [ -x "$yq_bin" ]; then
-    port="$("$yq_bin" eval '.["mixed-port"] // .port // ""' "$config_file" 2>/dev/null | head -n 1)"
+    port="$("$yq_bin" eval '.["mixed-port"] // ""' "$config_file" 2>/dev/null | head -n 1)"
+    if ! _clash_alias_valid_port "$port" || [ "$port" = "0" ]; then
+      port="$("$yq_bin" eval '.port // ""' "$config_file" 2>/dev/null | head -n 1)"
+    fi
   else
     port="$(sed -nE 's/^[[:space:]]*(mixed-port|port):[[:space:]]*"?([0-9]+)"?[[:space:]]*$/\2/p' "$config_file" | head -n 1)"
   fi
 
-  [ -n "${port:-}" ] && [ "$port" != "null" ] || return 1
+  _clash_alias_valid_port "$port" || return 1
+  echo "$port"
+}
+
+_clash_alias_runtime_socks_port() {
+  local config_file yq_bin port
+
+  config_file="$(_clash_alias_runtime_config_file)"
+  [ -s "$config_file" ] || return 1
+
+  port="$(_clash_alias_controller_socks_proxy_port 2>/dev/null || true)"
+  if _clash_alias_valid_port "$port"; then
+    echo "$port"
+    return 0
+  fi
+
+  yq_bin="$(_clash_alias_yq_bin)"
+  if [ -x "$yq_bin" ]; then
+    port="$("$yq_bin" eval '.["mixed-port"] // ""' "$config_file" 2>/dev/null | head -n 1)"
+    if ! _clash_alias_valid_port "$port" || [ "$port" = "0" ]; then
+      port="$("$yq_bin" eval '.["socks-port"] // ""' "$config_file" 2>/dev/null | head -n 1)"
+    fi
+  else
+    port="$(sed -nE 's/^[[:space:]]*(mixed-port|socks-port):[[:space:]]*"?([0-9]+)"?[[:space:]]*$/\2/p' "$config_file" | head -n 1)"
+  fi
+
+  _clash_alias_valid_port "$port" || return 1
+  echo "$port"
+}
+
+_clash_alias_valid_port() {
+  local port="${1:-}"
+
+  case "$port" in
+    ''|*[!0-9]*|0) return 1 ;;
+  esac
+
+  [ "$port" -le 65535 ] 2>/dev/null
+}
+
+_clash_alias_controller_addr() {
+  local config_file yq_bin addr
+
+  config_file="$(_clash_alias_runtime_config_file)"
+  [ -s "$config_file" ] || return 1
+
+  yq_bin="$(_clash_alias_yq_bin)"
+  if [ -x "$yq_bin" ]; then
+    addr="$("$yq_bin" eval '.["external-controller"] // ""' "$config_file" 2>/dev/null | head -n 1)"
+  else
+    addr="$(sed -nE 's/^[[:space:]]*external-controller:[[:space:]]*['"'"'"]?([^'"'"'"\r\n]+)['"'"'"]?[[:space:]]*$/\1/p' "$config_file" | head -n 1)"
+  fi
+
+  [ -n "${addr:-}" ] && [ "$addr" != "null" ] || return 1
+  echo "$addr"
+}
+
+_clash_alias_controller_secret() {
+  local config_file yq_bin secret
+
+  config_file="$(_clash_alias_runtime_config_file)"
+  [ -s "$config_file" ] || return 0
+
+  yq_bin="$(_clash_alias_yq_bin)"
+  if [ -x "$yq_bin" ]; then
+    secret="$("$yq_bin" eval '.secret // ""' "$config_file" 2>/dev/null | head -n 1)"
+  else
+    secret="$(sed -nE 's/^[[:space:]]*secret:[[:space:]]*['"'"'"]?([^'"'"'"\r\n]+)['"'"'"]?[[:space:]]*$/\1/p' "$config_file" | head -n 1)"
+  fi
+
+  [ "$secret" = "null" ] && secret=""
+  echo "$secret"
+}
+
+_clash_alias_controller_configs_json() {
+  local addr host port secret base
+
+  command -v curl >/dev/null 2>&1 || return 1
+
+  addr="$(_clash_alias_controller_addr)" || return 1
+  host="${addr%:*}"
+  port="${addr##*:}"
+
+  case "$host" in
+    0.0.0.0)
+      addr="127.0.0.1:${port}"
+      ;;
+  esac
+
+  secret="$(_clash_alias_controller_secret 2>/dev/null || true)"
+  base="http://${addr}"
+
+  if [ -n "${secret:-}" ]; then
+    curl --noproxy '*' -fsSL --connect-timeout 1 --max-time 2 \
+      -H "Authorization: Bearer $secret" \
+      "${base}/configs" && return 0
+  else
+    curl --noproxy '*' -fsSL --connect-timeout 1 --max-time 2 \
+      "${base}/configs" && return 0
+  fi
+
+  if [ "$base" != "http://127.0.0.1:9090" ]; then
+    if [ -n "${secret:-}" ]; then
+      curl --noproxy '*' -fsSL --connect-timeout 1 --max-time 2 \
+        -H "Authorization: Bearer $secret" \
+        "http://127.0.0.1:9090/configs"
+    else
+      curl --noproxy '*' -fsSL --connect-timeout 1 --max-time 2 \
+        "http://127.0.0.1:9090/configs"
+    fi
+  fi
+}
+
+_clash_alias_controller_http_proxy_port() {
+  local yq_bin json port
+
+  yq_bin="$(_clash_alias_yq_bin)"
+  [ -x "$yq_bin" ] || return 1
+
+  json="$(_clash_alias_controller_configs_json)" || return 1
+
+  port="$(printf '%s\n' "$json" | "$yq_bin" -p=json eval '.["mixed-port"] // ""' - 2>/dev/null | head -n 1)"
+  if ! _clash_alias_valid_port "$port"; then
+    port="$(printf '%s\n' "$json" | "$yq_bin" -p=json eval '.port // ""' - 2>/dev/null | head -n 1)"
+  fi
+
+  _clash_alias_valid_port "$port" || return 1
+  echo "$port"
+}
+
+_clash_alias_controller_socks_proxy_port() {
+  local yq_bin json port
+
+  yq_bin="$(_clash_alias_yq_bin)"
+  [ -x "$yq_bin" ] || return 1
+
+  json="$(_clash_alias_controller_configs_json)" || return 1
+
+  port="$(printf '%s\n' "$json" | "$yq_bin" -p=json eval '.["mixed-port"] // ""' - 2>/dev/null | head -n 1)"
+  if ! _clash_alias_valid_port "$port"; then
+    port="$(printf '%s\n' "$json" | "$yq_bin" -p=json eval '.["socks-port"] // ""' - 2>/dev/null | head -n 1)"
+  fi
+
+  _clash_alias_valid_port "$port" || return 1
   echo "$port"
 }
 
 _clash_alias_export_runtime_proxy() {
-  local port host http_url all_url no_proxy
+  local port socks_port host http_url all_url no_proxy
 
   port="$(_clash_alias_runtime_proxy_port)" || return $?
+  socks_port="$(_clash_alias_runtime_socks_port 2>/dev/null || echo "$port")"
   host="${CLASH_PROXY_HOST:-127.0.0.1}"
   http_url="http://${host}:${port}"
-  all_url="socks5://${host}:${port}"
+  all_url="socks5://${host}:${socks_port}"
   no_proxy="${NO_PROXY_DEFAULT:-127.0.0.1,localhost,::1}"
 
   _clash_alias_export_proxy_values "$http_url" "$http_url" "$all_url" "$no_proxy"

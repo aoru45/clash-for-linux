@@ -7071,17 +7071,18 @@ cmd_restart_direct() {
 }
 
 status_read_mixed_port() {
-  runtime_config_mixed_port 2>/dev/null || true
+  proxy_port 2>/dev/null || runtime_config_mixed_port 2>/dev/null || true
 }
 
 status_read_controller_raw() {
-  runtime_config_controller_addr 2>/dev/null || true
+  controller_active_addr 2>/dev/null || runtime_config_controller_addr 2>/dev/null || true
 }
 
 controller_externally_reachable() {
   local controller host
 
-  controller="$(status_read_controller_raw 2>/dev/null || true)"
+  controller="${1:-}"
+  [ -n "${controller:-}" ] || controller="$(status_read_controller_raw 2>/dev/null || true)"
   [ -n "${controller:-}" ] && [ "$controller" != "null" ] || return 1
 
   host="${controller%:*}"
@@ -7110,7 +7111,7 @@ status_read_controller_lan() {
   controller="$(status_read_controller_raw 2>/dev/null || true)"
   [ -n "${controller:-}" ] && [ "$controller" != "null" ] || return 1
 
-  controller_externally_reachable || return 1
+  controller_externally_reachable "$controller" || return 1
 
   port="${controller##*:}"
   lan_ip="$(ui_lan_ip 2>/dev/null || true)"
@@ -7123,7 +7124,7 @@ status_read_controller_public() {
   controller="$(status_read_controller_raw 2>/dev/null || true)"
   [ -n "${controller:-}" ] && [ "$controller" != "null" ] || return 1
 
-  controller_externally_reachable || return 1
+  controller_externally_reachable "$controller" || return 1
 
   port="${controller##*:}"
   public_ip="$(ui_public_ip 2>/dev/null || true)"

@@ -2545,8 +2545,9 @@ cat > "$profile_file" <<EOF
 #!/usr/bin/env bash
 # clash-for-linux shell entry
 export PATH="$(command_install_dir):\$PATH"
+export CLASH_FOR_LINUX_PROJECT_DIR="$PROJECT_DIR"
 
-if [ -n "\${BASH_VERSION:-}" ] && [ -z "\${CLASH_FOR_LINUX_SHELL_LOADED:-}" ]; then
+if { [ -n "\${BASH_VERSION:-}" ] || [ -n "\${ZSH_VERSION:-}" ]; } && [ -z "\${CLASH_FOR_LINUX_SHELL_LOADED:-}" ]; then
   export CLASH_FOR_LINUX_SHELL_LOADED="1"
   source "$alias_file"
 fi
