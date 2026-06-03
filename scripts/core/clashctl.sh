@@ -2362,7 +2362,7 @@ print_status_summary_compact() {
   [ -n "${profile:-}" ] || profile="default"
 
   mixed_port="$(status_read_mixed_port 2>/dev/null || true)"
-  allow_lan="$(runtime_config_allow_lan 2>/dev/null || config_allow_lan 2>/dev/null || echo true)"
+  allow_lan="$(runtime_config_allow_lan 2>/dev/null || config_allow_lan 2>/dev/null || echo false)"
   controller="$(status_read_controller 2>/dev/null || true)"
   controller_lan="$(status_read_controller_lan 2>/dev/null || true)"
   controller_public="$(status_read_controller_public 2>/dev/null || true)"
@@ -2483,7 +2483,7 @@ print_status_summary_verbose() {
   [ -n "${profile:-}" ] || profile="default"
 
   mixed_port="$(status_read_mixed_port 2>/dev/null || true)"
-  allow_lan="$(runtime_config_allow_lan 2>/dev/null || config_allow_lan 2>/dev/null || echo true)"
+  allow_lan="$(runtime_config_allow_lan 2>/dev/null || config_allow_lan 2>/dev/null || echo false)"
   controller="$(status_read_controller 2>/dev/null || true)"
   controller_lan="$(status_read_controller_lan 2>/dev/null || true)"
   controller_public="$(status_read_controller_public 2>/dev/null || true)"
@@ -3954,7 +3954,7 @@ cmd_config() {
 print_lan_status() {
   local allow_lan mixed_port lan_ip
 
-  allow_lan="$(runtime_config_allow_lan 2>/dev/null || config_allow_lan 2>/dev/null || echo true)"
+  allow_lan="$(runtime_config_allow_lan 2>/dev/null || config_allow_lan 2>/dev/null || echo false)"
   mixed_port="$(status_read_mixed_port 2>/dev/null || runtime_config_mixed_port 2>/dev/null || true)"
   lan_ip="$(ui_lan_ip 2>/dev/null || true)"
 

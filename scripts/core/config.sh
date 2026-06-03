@@ -312,10 +312,10 @@ ensure_config_files() {
 
   [ -f "$CONFIG_DIR/template.yaml" ] || cat > "$CONFIG_DIR/template.yaml" <<'EOF'
 mixed-port: 7890
-allow-lan: true
+allow-lan: false
 mode: rule
 log-level: info
-external-controller: 0.0.0.0:9090
+external-controller: 127.0.0.1:9090
 secret: ""
 
 tun:
@@ -384,10 +384,10 @@ config_allow_lan() {
   local value
 
   ensure_config_files
-  value="$("$(yq_bin)" eval '.["allow-lan"] // true' "$file" 2>/dev/null | head -n 1)"
+  value="$("$(yq_bin)" eval '.["allow-lan"] // false' "$file" 2>/dev/null | head -n 1)"
   case "$value" in
-    false) echo "false" ;;
-    *) echo "true" ;;
+    true) echo "true" ;;
+    *) echo "false" ;;
   esac
 }
 
@@ -820,7 +820,7 @@ normalize_runtime_config() {
   dns_port_value="$CLASH_DNS_PORT_RESOLVED"
   controller_secret_value="$(ensure_controller_secret)"
   dashboard_dir_value="$(runtime_dashboard_dir)"
-  allow_lan_value="$(config_allow_lan 2>/dev/null || echo true)"
+  allow_lan_value="$(config_allow_lan 2>/dev/null || echo false)"
 
   err_file="$(mktemp)"
   if ! mixed_port="$mixed_port" \
@@ -2042,7 +2042,7 @@ resolve_runtime_ports() {
   local used_ports=""
 
   preferred_mixed="${MIXED_PORT:-7890}"
-  preferred_controller="${EXTERNAL_CONTROLLER:-0.0.0.0:9090}"
+  preferred_controller="${EXTERNAL_CONTROLLER:-127.0.0.1:9090}"
   preferred_dns="${CLASH_DNS_PORT:-1053}"
 
   is_valid_port_number "$preferred_mixed" || die "MIXED_PORT 不合法：$preferred_mixed"
@@ -2077,7 +2077,7 @@ mark_install_port_plan() {
   load_resolved_runtime_ports "$resolved"
 
   preferred_mixed="${MIXED_PORT:-7890}"
-  preferred_controller="${EXTERNAL_CONTROLLER:-0.0.0.0:9090}"
+  preferred_controller="${EXTERNAL_CONTROLLER:-127.0.0.1:9090}"
   preferred_dns="${CLASH_DNS_PORT:-1053}"
 
   if [ "$MIXED_PORT_RESOLVED" = "$preferred_mixed" ]; then

@@ -3,6 +3,7 @@ override:
   socks-port: 0
   redir-port: 0
   mixed-port: 7897
+  allow-lan: false
 
 prepend:
   proxies: []

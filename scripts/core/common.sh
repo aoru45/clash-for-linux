@@ -332,9 +332,9 @@ normalize_env_compat() {
   fi
 
 
-  # 旧默认值迁移：公网默认监听
-  if [ "${EXTERNAL_CONTROLLER:-}" = "127.0.0.1:9090" ]; then
-    EXTERNAL_CONTROLLER="0.0.0.0:9090"
+  # 旧默认值迁移：控制器默认仅监听本机
+  if [ "${EXTERNAL_CONTROLLER:-}" = "0.0.0.0:9090" ]; then
+    EXTERNAL_CONTROLLER="127.0.0.1:9090"
   fi
   # 已废弃：active-only 主链不再消费该字段
   unset BUILD_MIN_SUCCESS_SOURCES 2>/dev/null || true
@@ -354,8 +354,8 @@ migrate_env_legacy_compat_fields() {
   awk '
     $0 ~ /^[[:space:]]*(export[[:space:]]+)?BUILD_MIN_SUCCESS_SOURCES=/ { next }
     $0 ~ /^[[:space:]]*(export[[:space:]]+)?CLASH_SUBSCRIPTION_FORMAT=/ { next }
-    $0 ~ /^[[:space:]]*(export[[:space:]]+)?EXTERNAL_CONTROLLER="?127\.0\.0\.1:9090"?$/ {
-      print "export EXTERNAL_CONTROLLER=\"0.0.0.0:9090\""
+    $0 ~ /^[[:space:]]*(export[[:space:]]+)?EXTERNAL_CONTROLLER="?0\.0\.0\.0:9090"?$/ {
+      print "export EXTERNAL_CONTROLLER=\"127.0.0.1:9090\""
       next
     }
     { print }
@@ -1761,10 +1761,10 @@ runtime_config_allow_lan() {
   file="$(runtime_config_file)"
   [ -s "$file" ] || return 1
 
-  value="$("$(yq_bin)" eval '.["allow-lan"] // true' "$file" 2>/dev/null | head -n 1)"
+  value="$("$(yq_bin)" eval '.["allow-lan"] // false' "$file" 2>/dev/null | head -n 1)"
   case "$value" in
-    false) echo "false" ;;
-    *) echo "true" ;;
+    true) echo "true" ;;
+    *) echo "false" ;;
   esac
 }
 

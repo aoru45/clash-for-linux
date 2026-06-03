@@ -120,7 +120,7 @@ $ clashsecret
 
 ## 🏠 局域网代理
 
-项目默认开启局域网代理：运行配置会写入 `allow-lan: true`，并把 `external-controller` 绑定到 `0.0.0.0`，避免订阅文件里的 `allow-lan: false` 覆盖项目默认值。
+项目默认关闭局域网代理：运行配置会写入 `allow-lan: false`，并把 `external-controller` 绑定到 `127.0.0.1`，避免订阅文件里的设置覆盖项目默认值。
 
 ```bash
 clashctl lan status
@@ -281,7 +281,7 @@ Control 层负责把常用动作收口成可理解的命令和反馈。
 ```bash
 KERNEL_TYPE=mihomo
 MIXED_PORT=7890
-EXTERNAL_CONTROLLER=0.0.0.0:9090
+EXTERNAL_CONTROLLER=127.0.0.1:9090
 CLASH_CONTROLLER_SECRET=your-secret
 CLASH_SUBSCRIPTION_URL=https://example.com/sub
 MIHOMO_VERSION=latest
