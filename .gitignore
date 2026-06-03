@@ -3,10 +3,11 @@
 .vscode/
 
 # Local env
-.env
+#.env
 
 # Runtime
-runtime/
+runtime/*
+!runtime/mixin.yaml
 
 # Local dashboard unpacked files
 resources/dashboard/dist/

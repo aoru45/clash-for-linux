@@ -1,0 +1,15 @@
+override:
+  port: 0
+  socks-port: 0
+  redir-port: 0
+  mixed-port: 7897
+
+prepend:
+  proxies: []
+  proxy-groups: []
+  rules: []
+
+append:
+  proxies: []
+  proxy-groups: []
+  rules: []
